@@ -1,4 +1,4 @@
-
+<!DOCTYPE html>
 <html lang="zh-TW" class="h-full bg-slate-900 text-slate-100">
 <head>
   <meta charset="UTF-8">
@@ -107,6 +107,11 @@
       <button onclick="exportToExcel()" class="bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-2 rounded-lg text-sm font-medium flex items-center space-x-2 transition shadow-lg shadow-emerald-900/30">
         <i class="fa-solid fa-file-excel"></i>
         <span>匯出數據 Excel</span>
+      </button>
+
+      <button onclick="openAuditLogModal()" class="bg-purple-600 hover:bg-purple-500 text-white px-3 py-2 rounded-lg text-sm font-medium flex items-center space-x-2 transition shadow-lg shadow-purple-900/30">
+        <i class="fa-solid fa-clock-rotate-left"></i>
+        <span>生產記錄增加與修改</span>
       </button>
 
       <button onclick="addNewRowModal()" class="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center space-x-2 transition shadow-lg shadow-blue-900/30">
@@ -226,13 +231,16 @@
           </form>
         </div>
 
-        <div class="flex items-center space-x-3 text-sm">
+        <div class="flex items-center space-x-3 text-sm flex-wrap">
           <label class="text-slate-400">班別篩選:</label>
           <select id="shiftFilter" onchange="resetPageAndRender()" class="bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-200 focus:outline-none focus:border-blue-500">
             <option value="ALL">全部班別</option>
             <option value="D">D 班</option>
             <option value="N">N 班</option>
           </select>
+
+          <label class="text-slate-400 ml-2">直通率低於(%):</label>
+          <input type="number" id="fpyThresholdInput" oninput="resetPageAndRender()" placeholder="例: 95" class="w-20 bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-slate-200 text-xs focus:outline-none focus:border-cyan-500">
 
           <label class="text-slate-400 ml-2">每頁顯示:</label>
           <select id="pageSizeSelect" onchange="changePageSize(this.value)" class="bg-slate-950 border border-slate-800 rounded-lg px-2 py-1.5 text-slate-200 focus:outline-none focus:border-blue-500 text-xs">
@@ -554,6 +562,40 @@
     </div>
   </div>
 
+  <!-- Audit Log Modal (生產記錄增加與修改紀錄) -->
+  <div id="auditLogModal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm hidden flex items-center justify-center p-4 z-50 overflow-y-auto">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-4xl max-h-[85vh] flex flex-col shadow-2xl">
+      <div class="px-6 py-4 border-b border-slate-800 flex justify-between items-center">
+        <h3 class="text-base font-bold text-slate-100 flex items-center space-x-2">
+          <i class="fa-solid fa-clock-rotate-left text-purple-400"></i>
+          <span>生產記錄增加與修改歷程</span>
+        </h3>
+        <button onclick="closeAuditLogModal()" class="text-slate-400 hover:text-white text-lg px-2">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+      <div class="p-6 overflow-y-auto flex-1 text-xs">
+        <table class="w-full text-left border-collapse">
+          <thead class="bg-slate-950 text-slate-300 font-semibold border-b border-slate-800">
+            <tr>
+              <th class="p-3 border-r border-slate-800">異動時間</th>
+              <th class="p-3 border-r border-slate-800">動作類型</th>
+              <th class="p-3 border-r border-slate-800 text-amber-300">工單 (RUN CARD)</th>
+              <th class="p-3 border-r border-slate-800">操作員</th>
+              <th class="p-3 text-slate-200">修改內容 / 異動說明</th>
+            </tr>
+          </thead>
+          <tbody id="auditLogTableBody" class="divide-y divide-slate-800 text-slate-300">
+            <!-- Rendered dynamically -->
+          </tbody>
+        </table>
+      </div>
+      <div class="px-6 py-3 bg-slate-950 border-t border-slate-800 flex justify-end">
+        <button onclick="closeAuditLogModal()" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition text-xs">關閉</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Loading Overlay with Gojo Hollow Purple (虚式「茈」) Progress Bar -->
   <div id="loadingOverlay" class="fixed inset-0 bg-slate-950/85 backdrop-blur-md hidden flex flex-col items-center justify-center z-50 p-4">
     <div class="bg-slate-900/90 border border-purple-500/40 p-6 rounded-2xl shadow-[0_0_50px_rgba(168,85,247,0.3)] max-w-md w-full flex flex-col items-center space-y-5 text-center relative overflow-hidden">
@@ -678,6 +720,7 @@
 
     // Load dataset from localStorage if available, otherwise defaultData
     let dataset = [];
+    let auditLogs = []; // 生產記錄增加與修改歷程紀錄
     try {
       const saved = localStorage.getItem('optics_production_dataset');
       if (saved) {
@@ -685,14 +728,26 @@
       } else {
         dataset = [...defaultData];
       }
+      const savedLogs = localStorage.getItem('optics_production_audit_logs');
+      if (savedLogs) {
+        auditLogs = JSON.parse(savedLogs);
+      } else {
+        // 初始化預設紀錄
+        auditLogs = [
+          { time: '2026-10-23 08:30:15', action: '新增', runCard: 'v5121-261004078-015.1', operator: 'VF1338', detail: '初始系統匯入或建立工單資料' },
+          { time: '2026-10-23 08:35:20', action: '新增', runCard: 'v5121-261003904-011.1', operator: 'PC2388', detail: '初始系統匯入或建立工單資料' }
+        ];
+      }
     } catch (e) {
       dataset = [...defaultData];
+      auditLogs = [];
     }
 
     // Save dataset to localStorage
     function saveDatasetToStorage() {
       try {
         localStorage.setItem('optics_production_dataset', JSON.stringify(dataset));
+        localStorage.setItem('optics_production_audit_logs', JSON.stringify(auditLogs));
       } catch (e) {
         console.error('LocalStorage save failed:', e);
       }
@@ -932,26 +987,49 @@
       const rawSearch = document.getElementById('searchInput').value.trim();
       const search = rawSearch.toLowerCase();
       const shiftFilter = document.getElementById('shiftFilter').value;
+      const fpyThresholdVal = parseFloat(document.getElementById('fpyThresholdInput').value);
 
       let result = dataset.filter(item => {
+        // 1. 班別篩選
         const matchesShift = shiftFilter === 'ALL' || item.shift === shiftFilter;
-        if (!search) return matchesShift;
+        if (!matchesShift) return false;
 
-        const searchableText = [
-          item.runCard,
-          item.machine,
-          item.lineNo,
-          item.holeNo,
-          item.shift,
-          item.operator,
-          item.patternType,
-          item.ipqcNote,
-          item.note,
-          item.preDate,
-          item.date
-        ].map(v => (v !== undefined && v !== null) ? String(v).toLowerCase() : '').join(' ');
+        // 2. 直通率低於篩選
+        if (!isNaN(fpyThresholdVal)) {
+          const itemFpy = parseFloat(String(item.fpynVal).replace('%', ''));
+          if (!isNaN(itemFpy) && itemFpy >= fpyThresholdVal) {
+            return false;
+          }
+        }
 
-        return matchesShift && searchableText.includes(search);
+        // 3. 機台與全欄位搜尋處理
+        if (search) {
+          // 如果使用者特別想針對機台做精確或字串比對 (例如輸入 121)
+          const machineStr = String(item.machine || '').toLowerCase();
+          const isMachineQuery = !isNaN(search) && machineStr === search;
+
+          if (isMachineQuery) {
+            return true;
+          }
+
+          const searchableText = [
+            item.runCard,
+            item.machine,
+            item.lineNo,
+            item.holeNo,
+            item.shift,
+            item.operator,
+            item.patternType,
+            item.ipqcNote,
+            item.note,
+            item.preDate,
+            item.date
+          ].map(v => (v !== undefined && v !== null) ? String(v).toLowerCase() : '').join(' ');
+
+          return searchableText.includes(search);
+        }
+
+        return true;
       });
 
       if (sortColumn && sortDirection) {
@@ -984,10 +1062,10 @@
         <tr class="hover:bg-slate-800/60 transition group">
           <td class="p-2 border-r border-slate-800 text-center sticky-col bg-slate-900 group-hover:bg-slate-800">
             <div class="flex items-center justify-center space-x-1">
-              <button onclick="editRow(${row.id})" class="p-1 text-blue-400 hover:text-blue-300 transition" title="編輯修改">
+              <button onclick="editRow('${row.id}')" class="p-1 text-blue-400 hover:text-blue-300 transition" title="編輯修改">
                 <i class="fa-solid fa-pen-to-square"></i>
               </button>
-              <button onclick="deleteRow(${row.id})" class="p-1 text-rose-400 hover:text-rose-300 transition" title="刪除">
+              <button onclick="deleteRow('${row.id}')" class="p-1 text-rose-400 hover:text-rose-300 transition" title="刪除">
                 <i class="fa-solid fa-trash-can"></i>
               </button>
             </div>
@@ -1333,11 +1411,12 @@
     }
 
     function editRow(id) {
-      const item = dataset.find(d => d.id === id);
+      // [FIXED] 支援雙重型別字串化比對尋找編輯項目
+      const item = dataset.find(d => String(d.id) === String(id));
       if (!item) return;
 
       const form = document.getElementById('recordForm');
-      document.getElementById('editingId').value = item.id;
+      document.getElementById('editingId').value = String(item.id);
       document.getElementById('modalTitle').innerText = `修改生產紀錄 (${item.runCard || '項次 ' + id})`;
 
       for (let key in item) {
@@ -1352,6 +1431,39 @@
 
     function closeModal() {
       document.getElementById('dataModal').classList.add('hidden');
+    }
+
+    function openAuditLogModal() {
+      const tbody = document.getElementById('auditLogTableBody');
+      if (auditLogs.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="5" class="p-4 text-center text-slate-500">目前尚無任何增加或修改紀錄</td></tr>`;
+      } else {
+        tbody.innerHTML = auditLogs.slice().reverse().map(log => `
+          <tr class="hover:bg-slate-800/40 transition">
+            <td class="p-3 border-r border-slate-800 text-slate-400 font-mono">${log.time}</td>
+            <td class="p-3 border-r border-slate-800 font-bold ${log.action === '新增' ? 'text-emerald-400' : 'text-blue-400'}">${log.action}</td>
+            <td class="p-3 border-r border-slate-800 font-mono font-bold text-amber-300">${log.runCard || '-'}</td>
+            <td class="p-3 border-r border-slate-800 font-semibold">${log.operator || '-'}</td>
+            <td class="p-3 text-slate-300">${log.detail}</td>
+          </tr>
+        `).join('');
+      }
+      document.getElementById('auditLogModal').classList.remove('hidden');
+    }
+
+    function closeAuditLogModal() {
+      document.getElementById('auditLogModal').classList.add('hidden');
+    }
+
+    function getCurrentDateTimeStr() {
+      const now = new Date();
+      const y = now.getFullYear();
+      const m = String(now.getMonth() + 1).padStart(2, '0');
+      const d = String(now.getDate()).padStart(2, '0');
+      const hh = String(now.getHours()).padStart(2, '0');
+      const mm = String(now.getMinutes()).padStart(2, '0');
+      const ss = String(now.getSeconds()).padStart(2, '0');
+      return `${y}-${m}-${d} ${hh}:${mm}:${ss}`;
     }
 
     function calcMetrics() {
@@ -1435,22 +1547,53 @@
       }
 
       const formData = new FormData(e.target);
-      const editingId = document.getElementById('editingId').value;
+      const editingIdStr = document.getElementById('editingId').value.trim();
 
       const record = {};
       formData.forEach((value, key) => {
-        record[key] = value;
+        if (key !== 'editingId') {
+          record[key] = value;
+        }
       });
 
-      if (editingId) {
-        const index = dataset.findIndex(d => d.id === Number(editingId));
+      const nowTime = getCurrentDateTimeStr();
+
+      // [FIXED] 嚴格利用 String(d.id) === String(editingIdStr) 進行比對，確保原地覆蓋而不新增
+      if (editingIdStr !== "") {
+        const index = dataset.findIndex(d => String(d.id) === String(editingIdStr));
         if (index !== -1) {
-          dataset[index] = { ...dataset[index], ...record, id: Number(editingId) };
+          dataset[index] = { ...dataset[index], ...record, id: dataset[index].id };
+          auditLogs.push({
+            time: nowTime,
+            action: '修改',
+            runCard: record.runCard || dataset[index].runCard,
+            operator: record.operator || dataset[index].operator,
+            detail: `更新機台: ${record.machine || '-'}, 線別: ${record.lineNo || '-'}, 直通率: ${record.fpynVal || '-'}`
+          });
           showToast('修改生產資料成功！');
+        } else {
+          // 找不到則退回新增避免漏資料
+          const newId = dataset.length ? Math.max(...dataset.map(d => Number(d.id) || 0)) + 1 : 1;
+          dataset.unshift({ ...record, id: newId });
+          auditLogs.push({
+            time: nowTime,
+            action: '新增',
+            runCard: record.runCard || '-',
+            operator: record.operator || '-',
+            detail: `新增生產工單 (機台: ${record.machine || '-'}, 投入數: ${record.inputNum || '-'})`
+          });
+          showToast('新增生產資料成功！');
         }
       } else {
-        const newId = dataset.length ? Math.max(...dataset.map(d => d.id)) + 1 : 1;
+        const newId = dataset.length ? Math.max(...dataset.map(d => Number(d.id) || 0)) + 1 : 1;
         dataset.unshift({ ...record, id: newId });
+        auditLogs.push({
+          time: nowTime,
+          action: '新增',
+          runCard: record.runCard || '-',
+          operator: record.operator || '-',
+          detail: `新增生產工單 (機台: ${record.machine || '-'}, 投入數: ${record.inputNum || '-'})`
+        });
         showToast('新增生產資料成功！');
       }
 
@@ -1463,7 +1606,17 @@
 
     function deleteRow(id) {
       if (confirm('確定要刪除這筆生產資料嗎？')) {
-        dataset = dataset.filter(d => d.id !== id);
+        const item = dataset.find(d => String(d.id) === String(id));
+        if (item) {
+          auditLogs.push({
+            time: getCurrentDateTimeStr(),
+            action: '刪除',
+            runCard: item.runCard || '-',
+            operator: item.operator || '-',
+            detail: `刪除工單紀錄 (機台: ${item.machine || '-'})`
+          });
+        }
+        dataset = dataset.filter(d => String(d.id) !== String(id));
         saveDatasetToStorage();
         updateHoleFilterOptions();
         renderTable();
@@ -1475,6 +1628,9 @@
     function resetData() {
       if (confirm('確定重置為預設數據？這將清除所有自訂修改與匯入紀錄。')) {
         dataset = [...defaultData];
+        auditLogs = [
+          { time: getCurrentDateTimeStr(), action: '重置', runCard: 'ALL', operator: 'System', detail: '重置為系統預設數據集' }
+        ];
         saveDatasetToStorage();
         sortColumn = null;
         sortDirection = null;
@@ -1649,6 +1805,13 @@
 
                     if (newDataset.length > 0) {
                       dataset = newDataset;
+                      auditLogs.push({
+                        time: getCurrentDateTimeStr(),
+                        action: '匯入',
+                        runCard: 'Excel 批次',
+                        operator: 'System',
+                        detail: `成功透過 Excel 批次匯入 ${newDataset.length} 筆生產數據`
+                      });
                       saveDatasetToStorage();
                       updateHoleFilterOptions();
                       resetPageAndRender();
