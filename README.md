@@ -242,6 +242,14 @@
           <label class="text-slate-400 ml-2">直通率低於(%):</label>
           <input type="number" id="fpyThresholdInput" oninput="resetPageAndRender()" placeholder="例: 95" class="w-20 bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-slate-200 text-xs focus:outline-none focus:border-cyan-500">
 
+          <!-- 新增機台快速搜尋選項 -->
+          <label class="text-slate-400 ml-2">機台:</label>
+          <input type="text" id="machineFilterInput" oninput="resetPageAndRender()" placeholder="例: 122" class="w-20 bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-slate-200 text-xs focus:outline-none focus:border-blue-500">
+
+          <!-- 新增線別快速搜尋選項 -->
+          <label class="text-slate-400 ml-2">線別:</label>
+          <input type="text" id="lineFilterInput" oninput="resetPageAndRender()" placeholder="例: 109" class="w-20 bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-slate-200 text-xs focus:outline-none focus:border-blue-500">
+
           <label class="text-slate-400 ml-2">每頁顯示:</label>
           <select id="pageSizeSelect" onchange="changePageSize(this.value)" class="bg-slate-950 border border-slate-800 rounded-lg px-2 py-1.5 text-slate-200 focus:outline-none focus:border-blue-500 text-xs">
             <option value="20">20 筆</option>
@@ -258,8 +266,8 @@
         </div>
       </div>
 
-      <!-- Data Table Scroll Container -->
-      <div class="overflow-x-auto overflow-y-auto max-h-[500px]">
+      <!-- Data Table Scroll Container with Mouse Drag Scroll Support -->
+      <div id="tableScrollContainer" class="overflow-x-auto overflow-y-auto max-h-[500px] select-none cursor-grab active:cursor-grabbing">
         <table class="w-full text-xs text-left border-collapse whitespace-nowrap">
           <thead class="bg-slate-950 text-slate-300 font-semibold sticky top-0 z-20 border-b border-slate-800">
             <tr>
@@ -276,6 +284,8 @@
 
               <th class="p-2 border-r border-slate-800 bg-amber-900/30 text-amber-200">穴號</th>
               <th class="p-2 border-r border-slate-800 bg-amber-900/30 text-amber-200">線別</th>
+              <!-- 度數欄位移至 RUN CARD 左邊 -->
+              <th class="p-2 border-r border-slate-800 bg-emerald-900/40 text-emerald-200">度數</th>
               <th class="p-2 border-r border-slate-800 bg-amber-400 text-slate-900 font-bold">RUN CARD</th>
 
               <!-- Sorted Header: 日期 -->
@@ -302,7 +312,7 @@
               <th class="p-2 border-r border-slate-800 bg-slate-800 text-slate-200">直通率</th>
               <th class="p-2 border-r border-slate-800 bg-cyan-900/40 text-cyan-300">CPK</th>
               <th class="p-2 border-r border-slate-800 bg-slate-800 text-slate-200">備註</th>
-              <th class="p-2 border-r border-slate-800 bg-emerald-900/40 text-emerald-200">度數</th>
+              
               <!-- Defect Header Group -->
               <th class="p-2 border-r border-slate-800 bg-rose-950/60 text-rose-300">1.留公</th>
               <th class="p-2 border-r border-slate-800 bg-rose-950/60 text-rose-300">2.油殘 YOSAI</th>
@@ -404,7 +414,11 @@
                 <option value="121">121</option>
               </select>
             </div>
-            <div class="col-span-2">
+            <div>
+              <label class="block text-emerald-400 font-semibold mb-1">度數</label>
+              <input type="text" name="degree" placeholder="" class="w-full bg-slate-950 border border-emerald-500/50 rounded p-2 text-emerald-200 font-mono">
+            </div>
+            <div class="col-span-3">
               <label class="block text-amber-400 font-semibold mb-1">RUN CARD</label>
               <input type="text" name="runCard" required placeholder="" class="w-full bg-slate-950 border border-amber-500/50 rounded p-2 text-amber-200 font-mono">
             </div>
@@ -492,7 +506,7 @@
             </div>
             <div>
               <label class="block text-slate-400 mb-1">AOI-OK入片</label>
-              <input type="number" name="aoiOkIn" placeholder="" class="w-full bg-slate-950 border border-slate-800 rounded p-2 text-slate-200">
+              <input type="number" id="aoiOkIn" name="aoiOkIn" placeholder="" class="w-full bg-slate-950 border border-slate-800 rounded p-2 text-slate-200">
             </div>
             <div>
               <label class="block text-slate-400 mb-1">AOI-NG</label>
@@ -514,10 +528,6 @@
             <div>
               <label class="block text-slate-400 mb-1">備註</label>
               <input type="text" name="ipqcNote" placeholder="" class="w-full bg-slate-950 border border-slate-800 rounded p-2 text-slate-200">
-            </div>
-            <div>
-              <label class="block text-slate-400 mb-1">度數</label>
-              <input type="text" name="degree" placeholder="" class="w-full bg-slate-950 border border-slate-800 rounded p-2 text-slate-200">
             </div>
           </div>
         </div>
@@ -637,7 +647,7 @@
     // Initial Dataset based exactly on image structure and content
     const defaultData = [
       {
-        id: 1, shift: 'D', preDate: '2026-10-20', holeNo: '10', lineNo: '109', runCard: 'v5121-261004078-015.1',
+        id: 1, shift: 'D', preDate: '2026-10-20', holeNo: '10', lineNo: '109', degree: '', runCard: 'v5121-261004078-015.1',
         date: '2026-10-23', machine: '122', startTime: '03:37', endTime: '08:16', operator: 'VF1338',
         inputNum: 4095, patternType: 'CF55T V2-2208', totalNum: 4095, yieldVal: '100%', inPiece: 4092,
         aoiOk: 3785, aoiOkIn: 3785, aoiNg: 307, aoiTotalNgYield: '7.5%', fpynVal: '92.4%',
@@ -647,7 +657,7 @@
         d_empty: '', d_taobao: '', d_outside: '', d_double: '', d_popie: '', d_shift: '', d_ring: '', note: ''
       },
       {
-        id: 2, shift: 'D', preDate: '2026-10-20', holeNo: '10', lineNo: '109', runCard: 'v5121-261003904-011.1',
+        id: 2, shift: 'D', preDate: '2026-10-20', holeNo: '10', lineNo: '109', degree: '', runCard: 'v5121-261003904-011.1',
         date: '2026-10-23', machine: '117', startTime: '03:39', endTime: '08:22', operator: 'PC2388',
         inputNum: 4088, patternType: 'CF55T V2-2238', totalNum: 4088, yieldVal: '100%', inPiece: 4079,
         aoiOk: 3959, aoiOkIn: 3959, aoiNg: 120, aoiTotalNgYield: '2.9%', fpynVal: '96.8%',
@@ -657,7 +667,7 @@
         d_empty: '', d_taobao: '', d_outside: '', d_double: '', d_popie: '', d_shift: '', d_ring: '', note: ''
       },
       {
-        id: 3, shift: 'D', preDate: '2026-10-20', holeNo: '10', lineNo: '109', runCard: 'v5121-261003903-010.1',
+        id: 3, shift: 'D', preDate: '2026-10-20', holeNo: '10', lineNo: '109', degree: '', runCard: 'v5121-261003903-010.1',
         date: '2026-10-23', machine: '125', startTime: '04:45', endTime: '08:22', operator: 'FT0005',
         inputNum: 4096, patternType: 'CF55T V2-2238', totalNum: 4096, yieldVal: '98.1%', inPiece: 4019,
         aoiOk: 3855, aoiOkIn: 3855, aoiNg: 164, aoiTotalNgYield: '4.1%', fpynVal: '94.1%',
@@ -667,7 +677,7 @@
         d_empty: '', d_taobao: '', d_outside: '', d_double: '', d_popie: '', d_shift: '', d_ring: '', note: ''
       },
       {
-        id: 4, shift: 'D', preDate: '2026-10-20', holeNo: '15', lineNo: '108', runCard: 'v5121-261004877-010.1',
+        id: 4, shift: 'D', preDate: '2026-10-20', holeNo: '15', lineNo: '108', degree: '', runCard: 'v5121-261004877-010.1',
         date: '2026-10-20', machine: '120', startTime: '05:08', endTime: '09:02', operator: 'VF1338',
         inputNum: 4093, patternType: 'CF55T V2-2209', totalNum: 4093, yieldVal: '99.2%', inPiece: 4059,
         aoiOk: 3891, aoiOkIn: 3891, aoiNg: 168, aoiTotalNgYield: '4.1%', fpynVal: '95.1%',
@@ -677,7 +687,7 @@
         d_empty: '', d_taobao: '', d_outside: '', d_double: '', d_popie: '', d_shift: '', d_ring: '', note: ''
       },
       {
-        id: 5, shift: 'D', preDate: '2026-10-20', holeNo: '11', lineNo: '112', runCard: 'v5121-261004877-009.1',
+        id: 5, shift: 'D', preDate: '2026-10-20', holeNo: '11', lineNo: '112', degree: '', runCard: 'v5121-261004877-009.1',
         date: '2026-10-20', machine: '116', startTime: '05:01', endTime: '09:17', operator: 'FW0298',
         inputNum: 4096, patternType: 'CF55T V2-2209', totalNum: 4096, yieldVal: '99.8%', inPiece: 4088,
         aoiOk: 3944, aoiOkIn: 3921, aoiNg: 144, aoiTotalNgYield: '3.5%', fpynVal: '96.3%',
@@ -687,7 +697,7 @@
         d_empty: '', d_taobao: '', d_outside: '', d_double: '', d_popie: '', d_shift: '', d_ring: '', note: ''
       },
       {
-        id: 6, shift: 'D', preDate: '2026-10-20', holeNo: '10', lineNo: '112', runCard: 'v5121-261004963-006.1',
+        id: 6, shift: 'D', preDate: '2026-10-20', holeNo: '10', lineNo: '112', degree: '', runCard: 'v5121-261004963-006.1',
         date: '2026-10-20', machine: '123', startTime: '07:18', endTime: '09:31', operator: 'FS0162',
         inputNum: 2059, patternType: 'MLK-2419', totalNum: 2059, yieldVal: '99.1%', inPiece: 2040,
         aoiOk: 1938, aoiOkIn: 1938, aoiNg: 102, aoiTotalNgYield: '5.0%', fpynVal: '94.1%',
@@ -697,7 +707,7 @@
         d_empty: '', d_taobao: '', d_outside: '', d_double: '', d_popie: '', d_shift: '', d_ring: '', note: ''
       },
       {
-        id: 7, shift: 'D', preDate: '2026-10-21', holeNo: '10', lineNo: '109', runCard: 'v5121-261003117-012.1',
+        id: 7, shift: 'D', preDate: '2026-10-21', holeNo: '10', lineNo: '109', degree: '', runCard: 'v5121-261003117-012.1',
         date: '2026-10-21', machine: '126', startTime: '06:30', endTime: '10:15', operator: 'PC2515',
         inputNum: 4096, patternType: 'CF55T V2-2125', totalNum: 4096, yieldVal: '99.8%', inPiece: 4087,
         aoiOk: 3847, aoiOkIn: 3847, aoiNg: 240, aoiTotalNgYield: '5.9%', fpynVal: '93.9%',
@@ -707,7 +717,7 @@
         d_empty: '', d_taobao: '', d_outside: '', d_double: '', d_popie: '', d_shift: '', d_ring: '', note: ''
       },
       {
-        id: 8, shift: 'D', preDate: '2026-10-21', holeNo: '9', lineNo: '109', runCard: 'v5121-261003116-011.1',
+        id: 8, shift: 'D', preDate: '2026-10-21', holeNo: '9', lineNo: '109', degree: '', runCard: 'v5121-261003116-011.1',
         date: '2026-10-21', machine: '118', startTime: '06:53', endTime: '10:31', operator: 'VF1338',
         inputNum: 4098, patternType: 'CF55T V2-2125', totalNum: 4098, yieldVal: '99.9%', inPiece: 4092,
         aoiOk: 3936, aoiOkIn: 3936, aoiNg: 156, aoiTotalNgYield: '3.8%', fpynVal: '96.0%',
@@ -717,6 +727,53 @@
         d_empty: '', d_taobao: '', d_outside: '', d_double: '', d_popie: '', d_shift: '', d_ring: '', note: ''
       }
     ];
+
+    // Field display label mapping for audit logs
+    const fieldLabelMap = {
+      shift: '班別',
+      preDate: '前段生產日期',
+      holeNo: '穴號',
+      lineNo: '線別',
+      degree: '度數',
+      runCard: 'RUN CARD',
+      date: '日期',
+      machine: '機台',
+      startTime: '開始時間',
+      endTime: '結束時間',
+      operator: '操作員',
+      inputNum: '投入數',
+      patternType: '圖紋種類 Pattern type',
+      totalNum: '總數',
+      yieldVal: '良率',
+      inPiece: '入片數',
+      aoiOk: 'AOI-OK',
+      aoiOkIn: 'AOI-OK入片',
+      aoiNg: 'AOI-NG',
+      aoiTotalNgYield: 'AOI總不良率',
+      fpynVal: '直通率',
+      cpk: 'CPK',
+      ipqcNote: '備註',
+      d_liugong: '1.留公',
+      d_yosai: '2.油殘 YOSAI',
+      d_pattern_dense: '3.圖紋密',
+      d_darkfield: '4.暗視野',
+      d_chimo: '5.積墨 CHIMO',
+      d_edge_break: '6.邊破',
+      d_chipa: '7.氣泡 CHIPA',
+      d_attach: '8.附加物',
+      d_mix_hole_particle: '混料:穴號:顆粒',
+      d_mix_particle: '混料:顆粒',
+      d_mix_hole: '混入穴號',
+      d_mix_false: '混料誤判',
+      d_empty: '空洞 EMPTY',
+      d_taobao: '反面 TAOBAO',
+      d_outside: '穴外亮點 OUTSIDE',
+      d_double: '疊片 DOUBLE',
+      d_popie: '碎片 POPIE',
+      d_shift: '鏡片偏移',
+      d_ring: '留RING',
+      note: '通用備註'
+    };
 
     // Load dataset from localStorage if available, otherwise defaultData
     let dataset = [];
@@ -787,7 +844,7 @@
       { key: 'd_ring', label: '留RING' }
     ];
 
-    // Initialize Page
+    // Initialize Page & Mouse Drag Scroll Support for Table
     window.onload = function() {
       if (typeof ChartDataLabels !== 'undefined') {
         Chart.register(ChartDataLabels);
@@ -796,7 +853,47 @@
       renderTable();
       initCharts();
       updateDashboard();
+      initMouseDragScroll();
     };
+
+    // 滑鼠左鍵點選往右拉捲動表格功能
+    function initMouseDragScroll() {
+      const slider = document.getElementById('tableScrollContainer');
+      if (!slider) return;
+      let isDown = false;
+      let startX;
+      let scrollLeft;
+
+      slider.addEventListener('mousedown', (e) => {
+        // 避免點擊按鈕或輸入框時觸發拖曳
+        if (['BUTTON', 'INPUT', 'SELECT', 'I'].includes(e.target.tagName)) return;
+        isDown = true;
+        slider.classList.add('cursor-grabbing');
+        slider.classList.remove('cursor-grab');
+        startX = e.pageX - slider.offsetLeft;
+        scrollLeft = slider.scrollLeft;
+      });
+
+      slider.addEventListener('mouseleave', () => {
+        isDown = false;
+        slider.classList.remove('cursor-grabbing');
+        slider.classList.add('cursor-grab');
+      });
+
+      slider.addEventListener('mouseup', () => {
+        isDown = false;
+        slider.classList.remove('cursor-grabbing');
+        slider.classList.add('cursor-grab');
+      });
+
+      slider.addEventListener('mousemove', (e) => {
+        if (!isDown) return;
+        e.preventDefault();
+        const x = e.pageX - slider.offsetLeft;
+        const walk = (x - startX) * 1.5; // 捲動速度倍率
+        slider.scrollLeft = scrollLeft - walk;
+      });
+    }
 
     // Populate Hole Filter Dropdown dynamically from dataset
     function updateHoleFilterOptions() {
@@ -988,6 +1085,8 @@
       const search = rawSearch.toLowerCase();
       const shiftFilter = document.getElementById('shiftFilter').value;
       const fpyThresholdVal = parseFloat(document.getElementById('fpyThresholdInput').value);
+      const machineFilterVal = document.getElementById('machineFilterInput').value.trim().toLowerCase();
+      const lineFilterVal = document.getElementById('lineFilterInput').value.trim().toLowerCase();
 
       let result = dataset.filter(item => {
         // 1. 班別篩選
@@ -1002,9 +1101,20 @@
           }
         }
 
-        // 3. 機台與全欄位搜尋處理
+        // 3. 機台快速篩選
+        if (machineFilterVal) {
+          const itemMachine = String(item.machine || '').toLowerCase();
+          if (!itemMachine.includes(machineFilterVal)) return false;
+        }
+
+        // 4. 線別快速篩選
+        if (lineFilterVal) {
+          const itemLine = String(item.lineNo || '').toLowerCase();
+          if (!itemLine.includes(lineFilterVal)) return false;
+        }
+
+        // 5. 全域搜尋關鍵字處理
         if (search) {
-          // 如果使用者特別想針對機台做精確或字串比對 (例如輸入 121)
           const machineStr = String(item.machine || '').toLowerCase();
           const isMachineQuery = !isNaN(search) && machineStr === search;
 
@@ -1023,7 +1133,8 @@
             item.ipqcNote,
             item.note,
             item.preDate,
-            item.date
+            item.date,
+            item.degree
           ].map(v => (v !== undefined && v !== null) ? String(v).toLowerCase() : '').join(' ');
 
           return searchableText.includes(search);
@@ -1074,6 +1185,8 @@
           <td class="p-2 border-r border-slate-800">${formatDateDisplay(row.preDate)}</td>
           <td class="p-2 border-r border-slate-800 text-center font-bold text-amber-200">${row.holeNo || ''}</td>
           <td class="p-2 border-r border-slate-800 text-center font-semibold text-blue-300">${row.lineNo || ''}</td>
+          <!-- 度數欄位移至 RUN CARD 左邊 -->
+          <td class="p-2 border-r border-slate-800 text-center font-mono text-emerald-300 bg-emerald-950/20">${row.degree || ''}</td>
           <td class="p-2 border-r border-slate-800 font-mono font-bold text-amber-300 bg-amber-950/10">${row.runCard || ''}</td>
           <td class="p-2 border-r border-slate-800">${formatDateDisplay(row.date)}</td>
           <td class="p-2 border-r border-slate-800 text-center font-semibold text-slate-200">${row.machine || ''}</td>
@@ -1092,7 +1205,6 @@
           <td class="p-2 border-r border-slate-800 font-bold text-cyan-400 bg-cyan-950/20 text-center">${row.fpynVal || ''}</td>
           <td class="p-2 border-r border-slate-800">${row.cpk || ''}</td>
           <td class="p-2 border-r border-slate-800 text-slate-300">${row.ipqcNote || ''}</td>
-          <td class="p-2 border-r border-slate-800 text-center">${row.degree || ''}</td>
           
           <td class="p-2 border-r border-slate-800 text-center font-mono ${row.d_liugong ? 'text-rose-400 font-bold bg-rose-950/30' : 'text-slate-600'}">${row.d_liugong || ''}</td>
           <td class="p-2 border-r border-slate-800 text-center font-mono ${row.d_yosai ? 'text-rose-400 font-bold bg-rose-950/30' : 'text-slate-600'}">${row.d_yosai || ''}</td>
@@ -1411,7 +1523,6 @@
     }
 
     function editRow(id) {
-      // [FIXED] 支援雙重型別字串化比對尋找編輯項目
       const item = dataset.find(d => String(d.id) === String(id));
       if (!item) return;
 
@@ -1558,21 +1669,36 @@
 
       const nowTime = getCurrentDateTimeStr();
 
-      // [FIXED] 嚴格利用 String(d.id) === String(editingIdStr) 進行比對，確保原地覆蓋而不新增
       if (editingIdStr !== "") {
         const index = dataset.findIndex(d => String(d.id) === String(editingIdStr));
         if (index !== -1) {
-          dataset[index] = { ...dataset[index], ...record, id: dataset[index].id };
+          const oldItem = dataset[index];
+          dataset[index] = { ...oldItem, ...record, id: oldItem.id };
+          
+          // 比對哪些欄位被修改了
+          const changes = [];
+          for (let key in record) {
+            const oldVal = (oldItem[key] !== undefined && oldItem[key] !== null) ? String(oldItem[key]).trim() : '';
+            const newVal = (record[key] !== undefined && record[key] !== null) ? String(record[key]).trim() : '';
+            if (oldVal !== newVal) {
+              const labelName = fieldLabelMap[key] || key;
+              const displayOld = oldVal === '' ? '(無)' : oldVal;
+              const displayNew = newVal === '' ? '(無)' : newVal;
+              changes.push(`${labelName} ${displayOld} 改成 ${displayNew}`);
+            }
+          }
+
+          const detailStr = changes.length > 0 ? changes.join('；') : '更新資料內容 (無數值變更)';
+
           auditLogs.push({
             time: nowTime,
             action: '修改',
-            runCard: record.runCard || dataset[index].runCard,
-            operator: record.operator || dataset[index].operator,
-            detail: `更新機台: ${record.machine || '-'}, 線別: ${record.lineNo || '-'}, 直通率: ${record.fpynVal || '-'}`
+            runCard: record.runCard || oldItem.runCard,
+            operator: record.operator || oldItem.operator,
+            detail: detailStr
           });
           showToast('修改生產資料成功！');
         } else {
-          // 找不到則退回新增避免漏資料
           const newId = dataset.length ? Math.max(...dataset.map(d => Number(d.id) || 0)) + 1 : 1;
           dataset.unshift({ ...record, id: newId });
           auditLogs.push({
@@ -1644,16 +1770,16 @@
 
     function exportToExcel() {
       const headers = [
-        ["班別", "前段生產日期", "穴號", "線別", "RUN CARD", "日期", "機台", "開始時間", "結束時間", "操作員", 
+        ["班別", "前段生產日期", "穴號", "線別", "度數", "RUN CARD", "日期", "機台", "開始時間", "結束時間", "操作員", 
          "投入數", "圖紋種類 Pattern type", "總數", "良率", "入片數", "AOI-OK", "AOI-OK入片", "AOI-NG", "AOI總不良率", 
-         "直通率", "CPK", "備註", "度數", "1.留公", "2.油殘 YOSAI", "3.圖紋密", "4.暗視野", "5.積墨 CHIMO", "6.邊破", 
+         "直通率", "CPK", "備註", "1.留公", "2.油殘 YOSAI", "3.圖紋密", "4.暗視野", "5.積墨 CHIMO", "6.邊破", 
          "7.氣泡 CHIPA", "8.附加物", "混料:穴號:顆粒", "混料:顆粒", "混入穴號", "混料誤判", "空洞 EMPTY", "反面 TAOBAO", "穴外亮點 OUTSIDE", "疊片 DOUBLE", "碎片 POPIE", "鏡片偏移", "留RING", "備註"]
       ];
 
       const rows = dataset.map(d => [
-        d.shift, d.preDate, d.holeNo, d.lineNo, d.runCard, d.date, d.machine, d.startTime, d.endTime, d.operator,
+        d.shift, d.preDate, d.holeNo, d.lineNo, d.degree, d.runCard, d.date, d.machine, d.startTime, d.endTime, d.operator,
         d.inputNum, d.patternType, d.totalNum, d.yieldVal, d.inPiece, d.aoiOk, d.aoiOkIn, d.aoiNg, d.aoiTotalNgYield,
-        d.fpynVal, d.cpk, d.ipqcNote, d.degree, d.d_liugong, d.d_yosai, d.d_pattern_dense, d.d_darkfield, d.d_chimo, d.d_edge_break,
+        d.fpynVal, d.cpk, d.ipqcNote, d.d_liugong, d.d_yosai, d.d_pattern_dense, d.d_darkfield, d.d_chimo, d.d_edge_break,
         d.d_chipa, d.d_attach, d.d_mix_hole_particle, d.d_mix_particle, d.d_mix_hole, d.d_mix_false, d.d_empty, d.d_taobao, d.d_outside, d.d_double, d.d_popie, d.d_shift, d.d_ring, d.note
       ]);
 
@@ -1761,25 +1887,25 @@
                         preDate: parseExcelDate(r[1]),
                         holeNo: r[2] || '',
                         lineNo: r[3] || '',
-                        runCard: r[4] || '',
-                        date: parseExcelDate(r[5]),
-                        machine: r[6] || '',
-                        startTime: parseExcelTime(r[7]),
-                        endTime: parseExcelTime(r[8]),
-                        operator: r[9] || '',
-                        inputNum: r[10] || '',
-                        patternType: r[11] || '',
-                        totalNum: r[12] || '',
-                        yieldVal: parseExcelPercent(r[13], 1),
-                        inPiece: r[14] || '',
-                        aoiOk: r[15] || '',
-                        aoiOkIn: r[16] || '',
-                        aoiNg: r[17] || '',
-                        aoiTotalNgYield: parseExcelPercent(r[18], 1),
-                        fpynVal: parseExcelPercent(r[19], 1),
-                        cpk: r[20] || '',
-                        ipqcNote: r[21] || '',
-                        degree: r[22] || '',
+                        degree: r[4] || '',
+                        runCard: r[5] || '',
+                        date: parseExcelDate(r[6]),
+                        machine: r[7] || '',
+                        startTime: parseExcelTime(r[8]),
+                        endTime: parseExcelTime(r[9]),
+                        operator: r[10] || '',
+                        inputNum: r[11] || '',
+                        patternType: r[12] || '',
+                        totalNum: r[13] || '',
+                        yieldVal: parseExcelPercent(r[14], 1),
+                        inPiece: r[15] || '',
+                        aoiOk: r[16] || '',
+                        aoiOkIn: r[17] || '',
+                        aoiNg: r[18] || '',
+                        aoiTotalNgYield: parseExcelPercent(r[19], 1),
+                        fpynVal: parseExcelPercent(r[20], 1),
+                        cpk: r[21] || '',
+                        ipqcNote: r[22] || '',
                         d_liugong: r[23] || '',
                         d_yosai: r[24] || '',
                         d_pattern_dense: r[25] || '',
@@ -1861,3 +1987,4 @@
   </script>
 </body>
 </html>
+```[cite: 12]
