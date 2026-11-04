@@ -97,7 +97,7 @@
     </div>
 
     <!-- Global Actions -->
-    <div class="flex items-center space-x-3 mt-2 sm:mt-0">
+    <div class="flex items-center space-x-3 mt-2 sm:mt-0 flex-wrap gap-y-2">
       <label class="cursor-pointer bg-slate-800 hover:bg-slate-700 text-slate-200 px-3 py-2 rounded-lg border border-slate-700 text-sm font-medium flex items-center space-x-2 transition">
         <i class="fa-solid fa-file-import text-blue-400"></i>
         <span>匯入 Excel (.xlsx)</span>
@@ -107,6 +107,16 @@
       <button onclick="exportToExcel()" class="bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-2 rounded-lg text-sm font-medium flex items-center space-x-2 transition shadow-lg shadow-emerald-900/30">
         <i class="fa-solid fa-file-excel"></i>
         <span>匯出數據 Excel</span>
+      </button>
+
+      <button onclick="manualBackupDownload()" class="bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-2 rounded-lg text-sm font-medium flex items-center space-x-2 transition shadow-lg shadow-indigo-900/30" title="備份資料到本機電腦 JSON">
+        <i class="fa-solid fa-hard-drive"></i>
+        <span>備份 JSON 檔</span>
+      </button>
+
+      <button onclick="openCloudConfigModal()" class="bg-teal-600 hover:bg-teal-500 text-white px-3 py-2 rounded-lg text-sm font-medium flex items-center space-x-2 transition shadow-lg shadow-teal-900/30" title="設定網路 Server 或 Google Sheet 上傳">
+        <i class="fa-solid fa-cloud-arrow-up"></i>
+        <span>雲端同步設定</span>
       </button>
 
       <button onclick="openAuditLogModal()" class="bg-purple-600 hover:bg-purple-500 text-white px-3 py-2 rounded-lg text-sm font-medium flex items-center space-x-2 transition shadow-lg shadow-purple-900/30">
@@ -652,6 +662,36 @@
     </div>
   </div>
 
+  <!-- Cloud / Webhook Settings Modal -->
+  <div id="cloudConfigModal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm hidden flex items-center justify-center p-4 z-50 overflow-y-auto">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-lg flex flex-col shadow-2xl">
+      <div class="px-6 py-4 border-b border-slate-800 flex justify-between items-center">
+        <h3 class="text-base font-bold text-slate-100 flex items-center space-x-2">
+          <i class="fa-solid fa-cloud-arrow-up text-teal-400"></i>
+          <span>網路 / 雲端伺服器自動上傳設定</span>
+        </h3>
+        <button onclick="closeCloudConfigModal()" class="text-slate-400 hover:text-white text-lg px-2">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+      <div class="p-6 space-y-4 text-xs">
+        <div>
+          <label class="block text-slate-300 font-semibold mb-1">Server API / Webhook URL Endpoint:</label>
+          <input type="text" id="webhookUrlInput" placeholder="https://your-company-server.com/api/upload or Google Apps Script URL" class="w-full bg-slate-950 border border-slate-800 rounded p-2 text-slate-200 focus:border-teal-500 font-mono text-[11px]">
+          <p class="text-[11px] text-slate-500 mt-1">設定後，每次匯入或修改生產資料時，將自動以 POST JSON 格式同步上傳至此 URL。</p>
+        </div>
+        <div class="flex items-center space-x-2">
+          <input type="checkbox" id="autoSyncCheckbox" class="w-4 h-4 accent-teal-500 cursor-pointer">
+          <label for="autoSyncCheckbox" class="text-slate-200 cursor-pointer">變更時自動同步至雲端 Server</label>
+        </div>
+      </div>
+      <div class="px-6 py-3 bg-slate-950 border-t border-slate-800 flex justify-end space-x-2">
+        <button onclick="closeCloudConfigModal()" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition text-xs">取消</button>
+        <button onclick="saveCloudConfig()" class="px-4 py-2 bg-teal-600 hover:bg-teal-500 text-white rounded-lg transition text-xs font-semibold">儲存設定</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Loading Overlay -->
   <div id="loadingOverlay" class="fixed inset-0 bg-slate-950/85 backdrop-blur-md hidden flex flex-col items-center justify-center z-50 p-4">
     <div class="bg-slate-900/90 border border-purple-500/40 p-6 rounded-2xl shadow-[0_0_50px_rgba(168,85,247,0.3)] max-w-md w-full flex flex-col items-center space-y-5 text-center relative overflow-hidden">
@@ -805,33 +845,114 @@
 
     let dataset = [];
     let auditLogs = [];
-    try {
-      const saved = localStorage.getItem('optics_production_dataset');
-      if (saved) {
-        dataset = JSON.parse(saved);
-      } else {
-        dataset = [...defaultData];
-      }
-      const savedLogs = localStorage.getItem('optics_production_audit_logs');
-      if (savedLogs) {
-        auditLogs = JSON.parse(savedLogs);
-      } else {
-        auditLogs = [
-          { time: '2026-10-23 08:30:15', action: '新增', runCard: 'v5121-261004078-015.1', operator: 'VF1338', detail: '初始系統匯入或建立工單資料' }
-        ];
-      }
-    } catch (e) {
-      dataset = [...defaultData];
-      auditLogs = [];
+    let db = null;
+
+    // --- 1. IndexedDB 瀏覽器高效永久資料庫引擎 ---
+    function initIndexedDB() {
+      return new Promise((resolve, reject) => {
+        const request = indexedDB.open('OpticsProductionDB', 1);
+        request.onupgradeneeded = function(e) {
+          const dbInstance = e.target.result;
+          if (!dbInstance.objectStoreNames.contains('production_store')) {
+            dbInstance.createObjectStore('production_store', { keyPath: 'key' });
+          }
+        };
+        request.onsuccess = function(e) {
+          db = e.target.result;
+          resolve(db);
+        };
+        request.onerror = function(e) {
+          console.error('IndexedDB 開啟失敗:', e);
+          resolve(null);
+        };
+      });
     }
 
-    function saveDatasetToStorage() {
+    function saveToIndexedDB(key, val) {
+      if (!db) return;
+      try {
+        const tx = db.transaction('production_store', 'readwrite');
+        const store = tx.objectStore('production_store');
+        store.put({ key: key, value: val });
+      } catch (err) {
+        console.error('IndexedDB 寫入錯誤:', err);
+      }
+    }
+
+    function getFromIndexedDB(key) {
+      return new Promise((resolve) => {
+        if (!db) return resolve(null);
+        try {
+          const tx = db.transaction('production_store', 'readonly');
+          const store = tx.objectStore('production_store');
+          const req = store.get(key);
+          req.onsuccess = function() {
+            resolve(req.result ? req.result.value : null);
+          };
+          req.onerror = function() {
+            resolve(null);
+          };
+        } catch (e) {
+          resolve(null);
+        }
+      });
+    }
+
+    // --- 2. 儲存與多重備份核心機制 ---
+    async function saveDatasetToStorage() {
+      // (A) 本機 IndexedDB 永久保存 (支援大容量)
+      saveToIndexedDB('dataset', dataset);
+      saveToIndexedDB('audit_logs', auditLogs);
+
+      // (B) localStorage 雙重備份
       try {
         localStorage.setItem('optics_production_dataset', JSON.stringify(dataset));
         localStorage.setItem('optics_production_audit_logs', JSON.stringify(auditLogs));
       } catch (e) {
-        console.error('LocalStorage save failed:', e);
+        console.warn('LocalStorage 可能容量已滿，改由 IndexedDB 完全保存。');
       }
+
+      // (C) 雲端 Server / Webhook 自動 POST 上傳
+      const autoSync = localStorage.getItem('optics_auto_sync') === 'true';
+      const webhookUrl = localStorage.getItem('optics_webhook_url');
+      if (autoSync && webhookUrl) {
+        uploadToCloudServer(webhookUrl);
+      }
+    }
+
+    // 雲端同步上傳功能
+    function uploadToCloudServer(url) {
+      fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          timestamp: new Date().toISOString(),
+          dataset: dataset,
+          auditLogs: auditLogs
+        })
+      }).then(res => {
+        if (res.ok) console.log('網路 Server 雲端備份同步成功');
+      }).catch(err => {
+        console.error('網路 Server 自動同步失敗:', err);
+      });
+    }
+
+    // 手動匯出電腦 JSON 備份檔
+    function manualBackupDownload() {
+      const backupObj = {
+        system: "光學製造生產數據管理系統",
+        exportDate: new Date().toISOString(),
+        dataset: dataset,
+        auditLogs: auditLogs
+      };
+      const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(backupObj, null, 2));
+      const downloadAnchor = document.createElement('a');
+      downloadAnchor.setAttribute("href", dataStr);
+      downloadAnchor.setAttribute("download", `光學生產數據備份_${new Date().toISOString().slice(0,10)}.json`);
+      document.body.appendChild(downloadAnchor);
+      downloadAnchor.click();
+      downloadAnchor.remove();
+      showToast('數據 JSON 備份檔已下載至本機電腦！');
     }
 
     let lineChartObj = null;
@@ -863,10 +984,36 @@
       { key: 'd_ring', label: '15.留 ring' }
     ];
 
-    window.onload = function() {
+    window.onload = async function() {
       if (typeof ChartDataLabels !== 'undefined') {
         Chart.register(ChartDataLabels);
       }
+
+      // 初始化 IndexedDB 並自動恢復數據
+      await initIndexedDB();
+      const idbData = await getFromIndexedDB('dataset');
+      const idbLogs = await getFromIndexedDB('audit_logs');
+
+      if (idbData && Array.isArray(idbData) && idbData.length > 0) {
+        dataset = idbData;
+      } else {
+        const saved = localStorage.getItem('optics_production_dataset');
+        if (saved) {
+          try { dataset = JSON.parse(saved); } catch (e) { dataset = [...defaultData]; }
+        } else {
+          dataset = [...defaultData];
+        }
+      }
+
+      if (idbLogs && Array.isArray(idbLogs) && idbLogs.length > 0) {
+        auditLogs = idbLogs;
+      } else {
+        const savedLogs = localStorage.getItem('optics_production_audit_logs');
+        if (savedLogs) {
+          try { auditLogs = JSON.parse(savedLogs); } catch (e) {}
+        }
+      }
+
       updateHoleFilterOptions();
       renderTable();
       initCharts();
@@ -1492,6 +1639,25 @@
 
     function closeAuditLogModal() {
       document.getElementById('auditLogModal').classList.add('hidden');
+    }
+
+    function openCloudConfigModal() {
+      document.getElementById('webhookUrlInput').value = localStorage.getItem('optics_webhook_url') || '';
+      document.getElementById('autoSyncCheckbox').checked = localStorage.getItem('optics_auto_sync') === 'true';
+      document.getElementById('cloudConfigModal').classList.remove('hidden');
+    }
+
+    function closeCloudConfigModal() {
+      document.getElementById('cloudConfigModal').classList.add('hidden');
+    }
+
+    function saveCloudConfig() {
+      const url = document.getElementById('webhookUrlInput').value.trim();
+      const autoSync = document.getElementById('autoSyncCheckbox').checked;
+      localStorage.setItem('optics_webhook_url', url);
+      localStorage.setItem('optics_auto_sync', autoSync ? 'true' : 'false');
+      closeCloudConfigModal();
+      showToast('雲端同步設定已儲存！');
     }
 
     function getCurrentDateTimeStr() {
