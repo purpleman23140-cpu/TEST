@@ -119,6 +119,11 @@
         <span>雲端同步設定</span>
       </button>
 
+      <button onclick="openGithubModal()" class="bg-slate-800 hover:bg-slate-700 text-white px-3 py-2 rounded-lg border border-slate-700 text-sm font-medium flex items-center space-x-2 transition shadow-lg shadow-slate-900/30" title="同步與備份資料至 GitHub 倉庫">
+        <i class="fa-brands fa-github text-purple-400 text-base"></i>
+        <span>GitHub 雲端同步</span>
+      </button>
+
       <button onclick="openAuditLogModal()" class="bg-purple-600 hover:bg-purple-500 text-white px-3 py-2 rounded-lg text-sm font-medium flex items-center space-x-2 transition shadow-lg shadow-purple-900/30">
         <i class="fa-solid fa-clock-rotate-left"></i>
         <span>生產記錄增加與修改</span>
@@ -662,6 +667,61 @@
     </div>
   </div>
 
+  <!-- GitHub Settings & Sync Modal -->
+  <div id="githubModal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm hidden flex items-center justify-center p-4 z-50 overflow-y-auto">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-lg flex flex-col shadow-2xl">
+      <div class="px-6 py-4 border-b border-slate-800 flex justify-between items-center">
+        <h3 class="text-base font-bold text-slate-100 flex items-center space-x-2">
+          <i class="fa-brands fa-github text-purple-400 text-lg"></i>
+          <span>GitHub API 數據同步與備份設定</span>
+        </h3>
+        <button onclick="closeGithubModal()" class="text-slate-400 hover:text-white text-lg px-2">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+      <div class="p-6 space-y-4 text-xs">
+        <div>
+          <label class="block text-slate-300 font-semibold mb-1">GitHub Personal Access Token (PAT) <span class="text-rose-400">*</span></label>
+          <input type="password" id="ghTokenInput" placeholder="ghp_xxxxxxxxxxxxxxxxxxxx" class="w-full bg-slate-950 border border-slate-800 rounded p-2 text-slate-200 focus:border-purple-500 font-mono text-[11px]">
+          <p class="text-[11px] text-slate-500 mt-1">請建立具備 Repo Contents Read/Write 權限之 Fine-grained Token。</p>
+        </div>
+        
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-slate-300 font-semibold mb-1">Repo 擁有者 (Owner/User) <span class="text-rose-400">*</span></label>
+            <input type="text" id="ghOwnerInput" placeholder="例: your-github-username" class="w-full bg-slate-950 border border-slate-800 rounded p-2 text-slate-200 focus:border-purple-500 font-mono text-[11px]">
+          </div>
+          <div>
+            <label class="block text-slate-300 font-semibold mb-1">Repo 名稱 (Repository) <span class="text-rose-400">*</span></label>
+            <input type="text" id="ghRepoInput" placeholder="例: optics-production-data" class="w-full bg-slate-950 border border-slate-800 rounded p-2 text-slate-200 focus:border-purple-500 font-mono text-[11px]">
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-slate-300 font-semibold mb-1">目標儲存檔案路徑 (Target File Path)</label>
+          <input type="text" id="ghPathInput" placeholder="data/production_data.json" class="w-full bg-slate-950 border border-slate-800 rounded p-2 text-slate-200 focus:border-purple-500 font-mono text-[11px]">
+          <p class="text-[11px] text-slate-500 mt-1">預設備份為 JSON 檔案格式，路徑若不存在將會自動新建。</p>
+        </div>
+
+        <div class="flex items-center space-x-2 pt-1">
+          <input type="checkbox" id="ghAutoSyncCheckbox" class="w-4 h-4 accent-purple-500 cursor-pointer">
+          <label for="ghAutoSyncCheckbox" class="text-slate-200 cursor-pointer font-medium">資料變更時自動 Commit/Push 至 GitHub</label>
+        </div>
+      </div>
+
+      <div class="px-6 py-3 bg-slate-950 border-t border-slate-800 flex justify-between items-center">
+        <button onclick="syncToGitHub(true)" class="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white rounded-lg transition text-xs font-semibold flex items-center space-x-2 shadow-lg shadow-purple-900/30">
+          <i class="fa-solid fa-cloud-arrow-up"></i>
+          <span>立即同步至 GitHub</span>
+        </button>
+        <div class="space-x-2">
+          <button onclick="closeGithubModal()" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition text-xs">取消</button>
+          <button onclick="saveGithubConfig()" class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition text-xs font-semibold">儲存設定</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Cloud / Webhook Settings Modal -->
   <div id="cloudConfigModal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm hidden flex items-center justify-center p-4 z-50 overflow-y-auto">
     <div class="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-lg flex flex-col shadow-2xl">
@@ -917,6 +977,12 @@
       const webhookUrl = localStorage.getItem('optics_webhook_url');
       if (autoSync && webhookUrl) {
         uploadToCloudServer(webhookUrl);
+      }
+
+      // (D) GitHub 自動同步 Commit & Push
+      const ghAutoSync = localStorage.getItem('optics_gh_auto_sync') === 'true';
+      if (ghAutoSync) {
+        syncToGitHub(false);
       }
     }
 
@@ -1639,6 +1705,116 @@
 
     function closeAuditLogModal() {
       document.getElementById('auditLogModal').classList.add('hidden');
+    }
+
+    // --- GitHub API 雲端同步核心模組 ---
+    function openGithubModal() {
+      document.getElementById('ghTokenInput').value = localStorage.getItem('optics_gh_token') || '';
+      document.getElementById('ghOwnerInput').value = localStorage.getItem('optics_gh_owner') || '';
+      document.getElementById('ghRepoInput').value = localStorage.getItem('optics_gh_repo') || '';
+      document.getElementById('ghPathInput').value = localStorage.getItem('optics_gh_path') || 'data/production_data.json';
+      document.getElementById('ghAutoSyncCheckbox').checked = localStorage.getItem('optics_gh_auto_sync') === 'true';
+      document.getElementById('githubModal').classList.remove('hidden');
+    }
+
+    function closeGithubModal() {
+      document.getElementById('githubModal').classList.add('hidden');
+    }
+
+    function saveGithubConfig() {
+      const token = document.getElementById('ghTokenInput').value.trim();
+      const owner = document.getElementById('ghOwnerInput').value.trim();
+      const repo = document.getElementById('ghRepoInput').value.trim();
+      let path = document.getElementById('ghPathInput').value.trim();
+      if (!path) path = 'data/production_data.json';
+      const autoSync = document.getElementById('ghAutoSyncCheckbox').checked;
+
+      localStorage.setItem('optics_gh_token', token);
+      localStorage.setItem('optics_gh_owner', owner);
+      localStorage.setItem('optics_gh_repo', repo);
+      localStorage.setItem('optics_gh_path', path);
+      localStorage.setItem('optics_gh_auto_sync', autoSync ? 'true' : 'false');
+
+      closeGithubModal();
+      showToast('GitHub 同步設定已成功儲存！');
+    }
+
+    async function syncToGitHub(manualTrigger = false) {
+      const token = localStorage.getItem('optics_gh_token') || (document.getElementById('ghTokenInput') ? document.getElementById('ghTokenInput').value.trim() : '');
+      const owner = localStorage.getItem('optics_gh_owner') || (document.getElementById('ghOwnerInput') ? document.getElementById('ghOwnerInput').value.trim() : '');
+      const repo = localStorage.getItem('optics_gh_repo') || (document.getElementById('ghRepoInput') ? document.getElementById('ghRepoInput').value.trim() : '');
+      let path = localStorage.getItem('optics_gh_path') || (document.getElementById('ghPathInput') ? document.getElementById('ghPathInput').value.trim() : '');
+      if (!path) path = 'data/production_data.json';
+
+      if (!token || !owner || !repo) {
+        if (manualTrigger) {
+          alert('請先填寫 GitHub Token、Repo 擁有者及 Repo 名稱！');
+          openGithubModal();
+        }
+        return;
+      }
+
+      if (manualTrigger) showToast('開始上傳資料至 GitHub...');
+
+      try {
+        const exportData = {
+          system: "光學製造生產數據管理系統",
+          updatedAt: new Date().toISOString(),
+          dataset: dataset,
+          auditLogs: auditLogs
+        };
+
+        // 安全地處理 UTF-8 Unicode 字元轉成 Base64
+        const jsonStr = JSON.stringify(exportData, null, 2);
+        const contentBase64 = btoa(unescape(encodeURIComponent(jsonStr)));
+
+        // 1. 查詢 GitHub API 以獲取當前檔案的 SHA (避開衝突並進行更新)
+        let sha = "";
+        const getUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${path}`;
+        try {
+          const getRes = await fetch(getUrl, {
+            headers: {
+              "Authorization": `Bearer ${token}`,
+              "Accept": "application/vnd.github.v3+json"
+            }
+          });
+          if (getRes.ok) {
+            const fileInfo = await getRes.json();
+            sha = fileInfo.sha;
+          }
+        } catch (e) {
+          console.log("檔案可能為全新，將建立新檔:", e);
+        }
+
+        // 2. Commit / Push 上傳資料至 GitHub 倉庫
+        const putBody = {
+          message: `自動備份生產數據: ${new Date().toLocaleString()}`,
+          content: contentBase64
+        };
+        if (sha) putBody.sha = sha;
+
+        const putRes = await fetch(getUrl, {
+          method: "PUT",
+          headers: {
+            "Authorization": `Bearer ${token}`,
+            "Content-Type": "application/json",
+            "Accept": "application/vnd.github.v3+json"
+          },
+          body: JSON.stringify(putBody)
+        });
+
+        if (putRes.ok) {
+          console.log('GitHub 同步成功！');
+          if (manualTrigger) showToast('成功將資料備份 Commit 並 Push 至 GitHub！');
+        } else {
+          const errData = await putRes.json();
+          console.error('GitHub API 上傳失敗:', errData);
+          if (manualTrigger) alert(`GitHub 上傳失敗: ${errData.message || '請確認 Token 與 Repo 權限'}`);
+        }
+      } catch (err) {
+        console.error('GitHub 同步發生異常:', err);
+        if (manualTrigger) alert('GitHub 同步過程發生網路異常。');
+      }
     }
 
     function openCloudConfigModal() {
